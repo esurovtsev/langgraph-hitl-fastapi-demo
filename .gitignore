@@ -38,6 +38,12 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+
+# Node.js dependencies
+frontend/node_modules/
+backend/studio/.langgraph_api
+
+
 .tox/
 .nox/
 .coverage
