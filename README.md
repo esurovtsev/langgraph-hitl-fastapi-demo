@@ -10,7 +10,27 @@ HITL systems combine automated AI workflows with critical points where human fee
 
 - **Backend:** Python FastAPI server running an embedded LangGraph agent.
 - **Frontend:** React app for interacting with the agent (sending messages, providing input when requested, viewing results).
-- **Communication:** REST API endpoints connect the frontend and backend. The backend manages the graph’s state, including pausing and resuming at human input nodes.
+- **Communication:** 
+  - **Basic Version**: REST API endpoints with blocking request/response pattern.
+  - **Advanced Version**: Server-Sent Events (SSE) for real-time streaming of LangGraph outputs.
+- **State Management:** The backend manages the graph's state, including pausing and resuming at human input nodes.
+
+## Implementation Versions
+
+This project has two implementations available as a learning progression:
+
+1. **Basic Version ([`basic-blocking-api` branch](https://github.com/esurovtsev/langgraph-hitl-fastapi-demo/tree/basic-blocking-api))**: Uses traditional blocking RESTful API calls, where the frontend waits for complete responses before updating. This is simpler to understand and implement.
+
+2. **Advanced Version ([`advanced-streaming-sse` branch](https://github.com/esurovtsev/langgraph-hitl-fastapi-demo/tree/advanced-streaming-sse))**: Uses Server-Sent Events (SSE) for streaming responses from LangGraph to the frontend, providing real-time updates as the AI generates content.
+
+To switch between versions:
+```bash
+# For basic implementation with blocking calls
+git checkout basic-blocking-api
+
+# For advanced implementation with streaming (default)
+git checkout advanced-streaming-sse
+```
 
 ## Learning Goals
 
@@ -18,6 +38,7 @@ HITL systems combine automated AI workflows with critical points where human fee
 - See how to implement HITL workflows that pause for human input and resume programmatically.
 - Learn how to connect a Python backend to a modern React frontend.
 - Explore practical patterns for managing agent state and user interaction.
+- Compare blocking vs streaming implementations for AI-powered applications.
 
 
 ## How to Run Locally
