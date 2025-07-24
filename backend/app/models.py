@@ -16,5 +16,5 @@ class ResumeRequest(BaseModel):
 # --- Minimal API Response ---
 class GraphResponse(BaseModel):
     thread_id: str
-    run_status: Literal["finished", "user_feedback"]
+    run_status: Literal["finished", "user_feedback", "pending"]
     assistant_response: Optional[str] = None
