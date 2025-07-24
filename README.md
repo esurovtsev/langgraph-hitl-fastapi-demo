@@ -19,9 +19,9 @@ HITL systems combine automated AI workflows with critical points where human fee
 
 This project has two implementations available as a learning progression:
 
-1. **Basic Version ([`basic-blocking-api` branch](https://github.com/esurovtsev/langgraph-hitl-fastapi-demo/tree/basic-blocking-api))**: Uses traditional blocking RESTful API calls, where the frontend waits for complete responses before updating. This is simpler to understand and implement.
+1. **Basic Version ([`basic-blocking-api`](https://github.com/esurovtsev/langgraph-hitl-fastapi-demo/tree/basic-blocking-api))**: Uses traditional blocking RESTful API calls, where the frontend waits for complete responses before updating. This is simpler to understand and implement.
 
-2. **Advanced Version ([`advanced-streaming-sse` branch](https://github.com/esurovtsev/langgraph-hitl-fastapi-demo/tree/advanced-streaming-sse))**: Uses Server-Sent Events (SSE) for streaming responses from LangGraph to the frontend, providing real-time updates as the AI generates content.
+2. **Advanced Version ([`advanced-streaming-sse`](https://github.com/esurovtsev/langgraph-hitl-fastapi-demo/tree/advanced-streaming-sse))**: Uses Server-Sent Events (SSE) for streaming responses from LangGraph to the frontend, providing real-time updates as the AI generates content.
 
 To switch between versions:
 ```bash
