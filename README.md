@@ -32,6 +32,49 @@ git checkout basic-blocking-api
 git checkout advanced-streaming-sse
 ```
 
+## Testing the Extended HITL Scenario (SSE/Streaming)
+
+This section demonstrates how to test a full Human-in-the-Loop (HITL) scenario using the advanced streaming server endpoints. The following curl commands walk through starting a run, streaming the response, providing feedback, streaming again, approving the answer, and finalizing the run.
+
+1) **Create a new run**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"human_request": "Explain what is HITL"}' http://localhost:8000/graph/stream/create
+```
+
+2) **Stream the result**
+```bash
+curl --no-buffer http://localhost:8000/graph/stream/{thread_id}
+```
+
+3) **Provide feedback**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "thread_id": "{thread_id}",
+  "review_action": "feedback",
+  "human_comment": "Make your answer only one sentence short."
+}' http://localhost:8000/graph/stream/resume
+```
+
+4) **Stream the revised result**
+```bash
+curl --no-buffer http://localhost:8000/graph/stream/{thread_id}
+```
+
+5) **Approve the answer**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "thread_id": "{thread_id}",
+  "review_action": "approved"
+}' http://localhost:8000/graph/stream/resume
+```
+
+6) **Stream the final result**
+```bash
+curl --no-buffer http://localhost:8000/graph/stream/{thread_id}
+```
+
+Replace `{thread_id}` with the actual thread_id you receive from the creation endpoint. You can also use the interactive API docs at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) to experiment with these endpoints.
+
 ## Learning Goals
 
 - Understand how to embed LangGraph in a real backend application.
