@@ -23,17 +23,25 @@ def assistant_draft(state: DraftReviewState) -> DraftReviewState:
     status = state.get("status", "approved")
 
     if (status == "feedback" and state.get("human_comment")):
-        human_comment = HumanMessage(content=state["human_comment"])
-
+        # Create a system message that incorporates the feedback as instructions
+        # rather than passing the feedback as a separate human message
         system_message = SystemMessage(content=(f"""
-        You are an AI assistant revising your previous draft. Carefully review the human's 
-        feedback and update your reply accordingly. Address all comments, corrections, 
-        or suggestions provided by the human. Ensure your revised response fully 
-        integrates the feedback, improves clarity, and resolves any issues raised.
+        You are an AI assistant revising your previous draft. 
+        
+        FEEDBACK FROM HUMAN: "{state["human_comment"]}"
+        
+        Carefully incorporate this feedback into your response. Address all comments, 
+        corrections, or suggestions. Ensure your revised response fully integrates 
+        the feedback, improves clarity, and resolves any issues raised.
+        
+        DO NOT repeat the feedback verbatim in your response.
         """))
 
-        messages = [user_message] + state["messages"] + [system_message, human_comment]
-        all_messages = state["messages"] + [human_comment]
+        # Only include the original messages and system message with embedded feedback
+        messages = [user_message] + state["messages"] + [system_message]
+        
+        # Don't add the human comment to the message history
+        all_messages = state["messages"]
 
     else:
         system_message = SystemMessage(content=("""
@@ -61,15 +69,28 @@ def human_feedback(state: DraftReviewState):
 
 
 def assistant_finalize(state: DraftReviewState) -> DraftReviewState:
-    system_message = """
+    # Get the most recent assistant response from the state
+    latest_response = state["assistant_response"]
+    
+    system_message = SystemMessage(content="""
     You are an AI assistant. The user has approved your draft. Carefully 
     review your reply and make any final improvements to clarity, tone, and 
     completeness. Ensure the response is polished, professional, and ready 
     to be delivered as the final answer.
-    """
-    messages = [system_message] + state["messages"]
+    
+    DO NOT expand the response significantly or revert to earlier versions.
+    Focus on polishing the MOST RECENT draft that was approved.
+    """)
+    
+    # Create a focused message list with just the original request and latest response
+    user_message = HumanMessage(content=state["human_request"])
+    assistant_message = HumanMessage(content=f"My previous draft: {latest_response}")
+    
+    # Use a more focused set of messages for the finalize step
+    messages = [system_message, user_message, assistant_message]
     response = model.invoke(messages)
 
+    # Add the finalized response to the message history
     all_messages = state['messages'] + [response]
 
     return {
