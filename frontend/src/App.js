@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from "react";
 import AssistantService from "./AssistantService";
 import ReactMarkdown from "react-markdown";
 
+// Flag to toggle between blocking API and streaming API
+const USE_STREAMING = true;
+
 const App = () => {
   // UI states: idle, waiting, user_feedback, finished
   const [uiState, setUiState] = useState("idle");
@@ -11,6 +14,11 @@ const App = () => {
   const [threadId, setThreadId] = useState(null);
   const [history, setHistory] = useState([]);
 
+  // Refs for tracking accumulated responses in streaming mode
+  const startAccumulatedResponseRef = useRef("");
+  const approveAccumulatedResponseRef = useRef("");
+  const feedbackAccumulatedResponseRef = useRef("");
+  
   const feedbackInputRef = useRef(null);
   useEffect(() => {
     if (uiState === "feedback_form" && feedbackInputRef.current) {
@@ -18,77 +26,253 @@ const App = () => {
     }
   }, [uiState]);
   
-  // Placeholder submit handlers
+  // Submit handlers
   const handleStart = async () => {
-  // Show user message and pending spinner immediately
-  setUiState("waiting");
-  setHistory([
-    { role: "user", content: question },
-    { role: "assistant", content: null } // null means pending/spinner
-  ]);
-  try {
-    const data = await AssistantService.startConversation(question);
-    setAssistantResponse(data.assistant_response);
-    setUiState("idle"); // Always set to idle to show review buttons first
-    setThreadId(data.thread_id);
+    // Show user message and pending spinner immediately
+    setUiState("waiting");
     setHistory([
       { role: "user", content: question },
-      { role: "assistant", content: data.assistant_response }
+      { role: "assistant", content: null } // null means pending/spinner
     ]);
-  } catch (err) {
-    setAssistantResponse("");
-    setUiState("idle");
-    alert("Failed to contact backend: " + err.message);
-  }
-};
+    
+    try {
+      if (!USE_STREAMING) {
+        // Original blocking API call
+        const data = await AssistantService.startConversation(question);
+        setAssistantResponse(data.assistant_response);
+        setUiState("idle"); // Always set to idle to show review buttons first
+        setThreadId(data.thread_id);
+        setHistory([
+          { role: "user", content: question },
+          { role: "assistant", content: data.assistant_response }
+        ]);
+      } else {
+        // Streaming API call
+        const data = await AssistantService.createStreamingConversation(question);
+        setThreadId(data.thread_id);
+        
+        // Initialize an empty response that will be built up token by token
+        setAssistantResponse("");
+        
+        // Reset the accumulated response ref for this session
+        startAccumulatedResponseRef.current = "";
+        
+        // Start streaming the response
+        const eventSource = AssistantService.streamResponse(
+          data.thread_id,
+          // Message callback - handle incoming tokens
+          (data) => {
+            if (data.content) {
+              // Update our ref with the new content
+              startAccumulatedResponseRef.current += data.content;
+              
+              // Update React state with the accumulated content
+              setAssistantResponse(startAccumulatedResponseRef.current);
+              
+              // Update history with current accumulated response
+              setHistory([
+                { role: "user", content: question },
+                { role: "assistant", content: startAccumulatedResponseRef.current }
+              ]);
+            } else if (data.status) {
+              // Update UI state based on status updates
+              if (data.status === "user_feedback") {
+                setUiState("idle"); // Show review buttons
+              } else if (data.status === "finished") {
+                setUiState("finished");
+              }
+            }
+          },
+          // Error callback
+          (error) => {
+            console.error("Streaming error:", error);
+            setUiState("idle");
+            // Check if error has a message property before using it
+            const errorMessage = error && error.message ? error.message : "Unknown error";
+            alert("Streaming error: " + errorMessage);
+          },
+          // Complete callback
+          () => {
+            console.log("Stream completed");
+            // Final history update is already handled in the message callback
+          }
+        );
+      }
+    } catch (err) {
+      setAssistantResponse("");
+      setUiState("idle");
+      // Check if error has a message property before using it
+      const errorMessage = err && err.message ? err.message : "Unknown error";
+      alert("Failed to contact backend: " + errorMessage);
+    }
+  };
 
   const handleApprove = async () => {
-  setUiState("waiting");
-  setHistory([...history, { role: "assistant", content: null }]); // Show spinner
-  try {
-    const data = await AssistantService.submitReview({
-      thread_id: threadId,
-      review_action: "approved"
-    });
-    setAssistantResponse(data.assistant_response);
-    setUiState("finished"); // Transition to finished state after approval
-    // Replace last assistant (spinner) with real response
-    setHistory(prev => [
-      ...prev.slice(0, -1),
-      { role: "assistant", content: data.assistant_response }
-    ]);
-  } catch (err) {
-    setUiState("idle");
-    alert("Failed to contact backend: " + err.message);
-  }
-};
+    setUiState("waiting");
+    setHistory([...history, { role: "assistant", content: null }]); // Show spinner
+    
+    try {
+      if (!USE_STREAMING) {
+        // Original blocking API call
+        const data = await AssistantService.submitReview({
+          thread_id: threadId,
+          review_action: "approved"
+        });
+        setAssistantResponse(data.assistant_response);
+        setUiState("finished"); // Transition to finished state after approval
+        // Replace last assistant (spinner) with real response
+        setHistory(prev => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: data.assistant_response }
+        ]);
+      } else {
+        // Streaming API call
+        const data = await AssistantService.resumeStreamingConversation({
+          thread_id: threadId,
+          review_action: "approved"
+        });
+        
+        // Initialize an empty response that will be built up token by token
+        setAssistantResponse("");
+        
+        // Reset the accumulated response ref for this session
+        approveAccumulatedResponseRef.current = "";
+        
+        // Start streaming the response
+        const eventSource = AssistantService.streamResponse(
+          threadId,
+          // Message callback - handle incoming tokens
+          (data) => {
+            if (data.content) {
+              // Update our ref with the new content
+              approveAccumulatedResponseRef.current += data.content;
+              
+              // Update React state with the accumulated content
+              setAssistantResponse(approveAccumulatedResponseRef.current);
+              
+              // Update the spinner message with the current tokens
+              setHistory(prev => [
+                ...prev.slice(0, -1),
+                { role: "assistant", content: approveAccumulatedResponseRef.current }
+              ]);
+            } else if (data.status) {
+              // Update UI state based on status updates
+              if (data.status === "finished") {
+                setUiState("finished");
+              }
+            }
+          },
+          // Error callback
+          (error) => {
+            console.error("Streaming error:", error);
+            setUiState("idle");
+            // Check if error has a message property before using it
+            const errorMessage = error && error.message ? error.message : "Unknown error";
+            alert("Streaming error: " + errorMessage);
+          },
+          // Complete callback
+          () => {
+            console.log("Stream completed");
+            // Final history update is already handled in the message callback
+          }
+        );
+      }
+    } catch (err) {
+      setUiState("idle");
+      // Check if error has a message property before using it
+      const errorMessage = err && err.message ? err.message : "Unknown error";
+      alert("Failed to contact backend: " + errorMessage);
+    }
+  };
 
   const handleFeedback = async () => {
-  setUiState("waiting");
-  setHistory([
-    ...history,
-    { role: "user", content: feedback },
-    { role: "assistant", content: null }
-  ]); // Show spinner after feedback
-  try {
-    const data = await AssistantService.submitReview({
-      thread_id: threadId,
-      review_action: "feedback",
-      human_comment: feedback
-    });
-    setAssistantResponse(data.assistant_response);
-    setUiState("idle"); // Return to review state after feedback
-    // Replace last assistant (spinner) with real response
-    setHistory(prev => [
-      ...prev.slice(0, -1),
-      { role: "assistant", content: data.assistant_response }
-    ]);
-    setFeedback("");
-  } catch (err) {
-    setUiState("idle");
-    alert("Failed to contact backend: " + err.message);
-  }
-};
+    setUiState("waiting");
+    setHistory([
+      ...history,
+      { role: "user", content: feedback },
+      { role: "assistant", content: null }
+    ]); // Show spinner after feedback
+    
+    try {
+      if (!USE_STREAMING) {
+        // Original blocking API call
+        const data = await AssistantService.submitReview({
+          thread_id: threadId,
+          review_action: "feedback",
+          human_comment: feedback
+        });
+        setAssistantResponse(data.assistant_response);
+        setUiState("idle"); // Return to review state after feedback
+        // Replace last assistant (spinner) with real response
+        setHistory(prev => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: data.assistant_response }
+        ]);
+        setFeedback("");
+      } else {
+        // Streaming API call
+        const data = await AssistantService.resumeStreamingConversation({
+          thread_id: threadId,
+          review_action: "feedback",
+          human_comment: feedback
+        });
+        
+        // Initialize an empty response that will be built up token by token
+        setAssistantResponse("");
+        
+        // Reset the accumulated response ref for this session
+        feedbackAccumulatedResponseRef.current = "";
+        
+        // Start streaming the response
+        const eventSource = AssistantService.streamResponse(
+          threadId,
+          // Message callback - handle incoming tokens
+          (data) => {
+            if (data.content) {
+              // Update our ref with the new content
+              feedbackAccumulatedResponseRef.current += data.content;
+              
+              // Update React state with the accumulated content
+              setAssistantResponse(feedbackAccumulatedResponseRef.current);
+              
+              // Update the spinner message with the current tokens
+              setHistory(prev => [
+                ...prev.slice(0, -1),
+                { role: "assistant", content: feedbackAccumulatedResponseRef.current }
+              ]);
+            } else if (data.status) {
+              // Update UI state based on status updates
+              if (data.status === "user_feedback") {
+                setUiState("idle"); // Show review buttons
+              } else if (data.status === "finished") {
+                setUiState("finished");
+              }
+            }
+          },
+          // Error callback
+          (error) => {
+            console.error("Streaming error:", error);
+            setUiState("idle");
+            // Check if error has a message property before using it
+            const errorMessage = error && error.message ? error.message : "Unknown error";
+            alert("Streaming error: " + errorMessage);
+          },
+          // Complete callback
+          () => {
+            console.log("Stream completed");
+            // Final history update is already handled in the message callback
+          }
+        );
+        
+        setFeedback(""); // Clear feedback field
+      }
+    } catch (err) {
+      setUiState("idle");
+      // Check if error has a message property before using it
+      const errorMessage = err && err.message ? err.message : "Unknown error";
+      alert("Failed to contact backend: " + errorMessage);
+    }
+  };
 
   // Render
   return (
@@ -227,30 +411,15 @@ const App = () => {
                 onClick={() => setUiState("user_feedback")}
                 style={{ padding: "8px 24px", height: 48, fontSize: 20 }}
               >
-                Send Feedback
+                Provide Feedback
               </button>
             </div>
           )
         )}
         {uiState === "finished" && (
-          <div>
-            <div style={{ textAlign: "right", margin: "8px 0" }}>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 2 }}>You approved</div>
-              <span style={{ fontWeight: 600 }}>You: </span>approved the answer
-            </div>
-            <div style={{ marginTop: 24, padding: 12, background: "#f6f6f6", borderRadius: 6 }}>
-              <span style={{
-                fontWeight: 700,
-                color: '#1976d2',
-                background: 'rgba(25, 118, 210, 0.08)',
-                padding: '2px 8px',
-                borderRadius: 4,
-                marginBottom: 8,
-                display: 'inline-block'
-              }}>
-                Assistant:
-              </span>
-              <strong style={{ marginLeft: 8 }}>Final version:</strong>
+          <div style={{ marginTop: 24, background: '#f0f7ff', border: '1px solid #c2d8f2', borderRadius: 6, padding: 18 }}>
+            <div style={{ marginBottom: 8, fontWeight: 600, color: '#1976d2' }}>Final Version:</div>
+            <div style={{ padding: 12 }}>
               <ReactMarkdown>{assistantResponse}</ReactMarkdown>
             </div>
           </div>

@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.models import StartRequest, GraphResponse, ResumeRequest
 from app.graph import graph
 from sse_starlette.sse import EventSourceResponse
+import json
 
 router = APIRouter()
 
@@ -104,34 +105,48 @@ async def stream_graph(request: Request, thread_id: str):
         # For resume operations, we pass None as the input state
         # input_state is already None
     
-    async def event_generator():
+    async def event_generator():       
         # Initial event with thread_id
-        yield {"event": event_type, "data": {"thread_id": thread_id}}
+        initial_data = json.dumps({"thread_id": thread_id})
+        print(f"DEBUG: Sending initial {event_type} event with data: {initial_data}")
+
+        yield {"event": event_type, "data": initial_data}
         
         try:
+            print(f"DEBUG: Starting to stream graph messages for thread_id={thread_id}")
             for msg, metadata in graph.stream(input_state, config, stream_mode="messages"):
                 if await request.is_disconnected():
+                    print("DEBUG: Client disconnected, breaking stream loop")
                     break
                     
                 if metadata.get('langgraph_node') in ['assistant_draft', 'assistant_finalize']:
-                    yield {"event": "token", "data": {"content": msg.content}}
+                    token_data = json.dumps({"content": msg.content})
+                    print(f"DEBUG: Sending token event with data: {token_data[:30]}...")
+                    yield {"event": "token", "data": token_data}
             
             # After streaming completes, check if human feedback is needed
             state = graph.get_state(config)
             if state.next and 'human_feedback' in state.next:
-                yield {"event": "status", "data": {"status": "user_feedback"}}
+                status_data = json.dumps({"status": "user_feedback"})
+                print(f"DEBUG: Sending status event (feedback): {status_data}")
+                yield {"event": "status", "data": status_data}
             else:
-                yield {"event": "status", "data": {"status": "finished"}}
+                status_data = json.dumps({"status": "finished"})
+                print(f"DEBUG: Sending status event (finished): {status_data}")
+                yield {"event": "status", "data": status_data}
                 
             # Clean up the thread configuration after streaming is complete
             if thread_id in run_configs:
+                print(f"DEBUG: Cleaning up thread_id={thread_id} from run_configs")
                 del run_configs[thread_id]
                 
         except Exception as e:
-            yield {"event": "error", "data": {"error": str(e)}}
+            print(f"DEBUG: Exception in event_generator: {str(e)}")
+            yield {"event": "error", "data": json.dumps({"error": str(e)})}
             
             # Clean up on error as well
             if thread_id in run_configs:
+                print(f"DEBUG: Cleaning up thread_id={thread_id} from run_configs after error")
                 del run_configs[thread_id]
     
     return EventSourceResponse(event_generator())
