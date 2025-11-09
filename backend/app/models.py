@@ -18,3 +18,7 @@ class GraphResponse(BaseModel):
     thread_id: str
     run_status: Literal["finished", "user_feedback", "pending"]
     assistant_response: Optional[str] = None
+
+class ApproveRequest(BaseModel):
+    thread_id: str
+    approve_action: Literal["approved", "rejected"]

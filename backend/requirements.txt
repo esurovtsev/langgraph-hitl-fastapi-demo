@@ -9,3 +9,5 @@ langchain_core
 langchain_community
 python-dotenv
 sse-starlette
+pyppeteer
+langchain-mcp-adapters
