@@ -73,6 +73,35 @@ curl -X POST -H "Content-Type: application/json" -d '{
 curl --no-buffer http://localhost:8000/graph/stream/{thread_id}
 ```
 
+## Testing the async MCP tool calling (simple)
+
+1) **Start processing**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"human_request": "Provide info about my account on github"}' http://localhost:8000/mcp/start
+```
+
+2) **Approve the tool**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "thread_id": "{thread_id}",
+  "approve_action": "approved"
+}' http://localhost:8000/mcp/approve
+```
+
+3) **Start processing 2**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"human_request": "Create a new github repo with the name 'langgraph-mcp'"}' http://localhost:8000/mcp/start
+```
+
+2) **Reject the tool**
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "thread_id": "{thread_id}",
+  "approve_action": "rejected"
+}' http://localhost:8000/mcp/approve
+```
+
+
 Replace `{thread_id}` with the actual thread_id you receive from the creation endpoint. You can also use the interactive API docs at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) to experiment with these endpoints.
 
 ## Learning Goals
